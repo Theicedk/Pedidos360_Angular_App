@@ -6,5 +6,5 @@ export const environment = {
     redirectUri: 'http://localhost:4200',
     apiScope: 'api://0ab8451e-f1ac-4ca0-995c-5557ce2e3893/Pedidos.Read',
   },
-  apiBaseUrl: 'https://uarjv6gnj8.execute-api.us-east-1.amazonaws.com/Desarrollo',
+  apiBaseUrl: 'http://localhost:8080',
 };
