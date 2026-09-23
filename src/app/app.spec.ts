@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { provideRouter } from '@angular/router';
-import { MsalService } from '@azure/msal-angular';
+import { MsalBroadcastService, MsalService } from '@azure/msal-angular';
 import { of } from 'rxjs';
 import { App } from './app';
 
@@ -15,6 +15,10 @@ const msalServiceMock = {
   },
 };
 
+const msalBroadcastServiceMock = {
+  inProgress$: of('none'),
+};
+
 describe('App', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
@@ -23,6 +27,7 @@ describe('App', () => {
         provideHttpClient(),
         provideRouter([]),
         { provide: MsalService, useValue: msalServiceMock },
+        { provide: MsalBroadcastService, useValue: msalBroadcastServiceMock },
       ],
     })
       .compileComponents();

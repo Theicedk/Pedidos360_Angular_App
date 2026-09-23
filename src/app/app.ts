@@ -2,10 +2,15 @@ import { CommonModule } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
 import { Component, OnInit, signal } from '@angular/core';
 import { RouterLink, RouterOutlet } from '@angular/router';
-import { MsalService } from '@azure/msal-angular';
-import { AccountInfo, AuthenticationResult } from '@azure/msal-browser';
-import { catchError, finalize, of, switchMap, timeout } from 'rxjs';
+import { MsalBroadcastService, MsalService } from '@azure/msal-angular';
+import { AccountInfo, AuthenticationResult, InteractionStatus } from '@azure/msal-browser';
+import { catchError, filter, finalize, of, switchMap, timeout } from 'rxjs';
 import { environment } from '../environments/environtment';
+
+type TokenClaims = {
+  roles?: unknown;
+  role?: unknown;
+};
 
 @Component({
   selector: 'app-root',
@@ -16,23 +21,24 @@ import { environment } from '../environments/environtment';
 export class App implements OnInit {
   user: AccountInfo | null = null;
   sesionCargada = signal(false);
-  accessTokenPreview = '';
+  rolUsuario = signal('No identificado');
   respuestaApi = signal<unknown | null>(null);
   errorApi = signal('');
   cargandoPedidos = signal(false);
 
   constructor(
     private readonly authService: MsalService,
+    private readonly msalBroadcastService: MsalBroadcastService,
     private readonly http: HttpClient,
   ) {}
 
   ngOnInit(): void {
-    setTimeout(() => {
-      if (!this.sesionCargada()) {
+    this.msalBroadcastService.inProgress$
+      .pipe(filter((status) => status === InteractionStatus.None))
+      .subscribe(() => {
         this.actualizarUsuario();
         this.sesionCargada.set(true);
-      }
-    }, 10000);
+      });
 
     this.authService.initialize().pipe(
       switchMap(() => this.authService.handleRedirectObservable({
@@ -53,6 +59,8 @@ export class App implements OnInit {
           this.authService.instance.setActiveAccount(result.account);
         }
         this.actualizarUsuario();
+        this.actualizarRol(result?.accessToken);
+        this.sesionCargada.set(true);
       },
       error: (error: unknown) => {
         console.error('Error en MSAL:', error);
@@ -72,6 +80,8 @@ export class App implements OnInit {
     } else {
       this.user = null;
     }
+
+    this.actualizarRol();
   }
 
   login(): void {
@@ -86,10 +96,26 @@ export class App implements OnInit {
     });
   }
 
-  obtenerAccessToken(): void {
+  private actualizarRol(accessToken?: string): void {
     const account = this.authService.instance.getActiveAccount();
     if (!account) {
+      this.rolUsuario.set('No identificado');
       return;
+    }
+
+    const accountClaims = account.idTokenClaims as TokenClaims | undefined;
+    const accountRole = this.extraerRol(accountClaims);
+    if (accountRole) {
+      this.rolUsuario.set(accountRole);
+      return;
+    }
+
+    if (accessToken) {
+      const tokenRole = this.extraerRol(this.decodificarToken(accessToken));
+      if (tokenRole) {
+        this.rolUsuario.set(tokenRole);
+        return;
+      }
     }
 
     this.authService.acquireTokenSilent({
@@ -97,14 +123,38 @@ export class App implements OnInit {
       scopes: [environment.msal.apiScope],
     }).subscribe({
       next: (result) => {
-        this.accessTokenPreview = result.accessToken;
+        const tokenRole = this.extraerRol(this.decodificarToken(result.accessToken));
+        this.rolUsuario.set(tokenRole ?? 'No identificado');
       },
       error: () => {
-        this.authService.acquireTokenRedirect({
-          scopes: [environment.msal.apiScope],
-        });
+        this.rolUsuario.set('No identificado');
       },
     });
+  }
+
+  private extraerRol(claims: TokenClaims | undefined): string | null {
+    if (!claims) {
+      return null;
+    }
+
+    const roles = Array.isArray(claims.roles) ? claims.roles : [claims.role];
+    const role = roles.find((value): value is string => typeof value === 'string' && value.trim().length > 0);
+    return role?.trim() ?? null;
+  }
+
+  private decodificarToken(accessToken: string): TokenClaims | undefined {
+    try {
+      const payload = accessToken.split('.')[1];
+      if (!payload) {
+        return undefined;
+      }
+
+      const normalizedPayload = payload.replace(/-/g, '+').replace(/_/g, '/');
+      const decodedPayload = atob(normalizedPayload.padEnd(Math.ceil(normalizedPayload.length / 4) * 4, '='));
+      return JSON.parse(decodedPayload) as TokenClaims;
+    } catch {
+      return undefined;
+    }
   }
 
   consultarPedidos(): void {

@@ -7,7 +7,7 @@
     </section>
   } @else if (!user) {
     <section>
-      <p>Usuario no autenticado.</p>
+      <h2>Inicia sesión para continuar</h2>
       <button type="button" (click)="login()">Iniciar sesión</button>
     </section>
   } @else {
@@ -16,6 +16,22 @@
       <p><strong>Nombre:</strong> {{ user.name }}</p>
       <p><strong>Cuenta:</strong> {{ user.username }}</p>
       <p><strong>Tenant ID:</strong> {{ user.tenantId }}</p>
+      <h3>Bienvenido, tu tipo de usuario es: {{ rolUsuario() }}</h3>
+
+      @switch (rolUsuario().toLowerCase()) {
+        @case ('administrador') {
+          <p>Panel de administración disponible.</p>
+        }
+        @case ('vendedor') {
+          <p>Panel de gestión comercial disponible.</p>
+        }
+        @case ('cliente') {
+          <p>Panel de pedidos disponible.</p>
+        }
+        @default {
+          <p>Panel general disponible.</p>
+        }
+      }
 
       <div>
         <a routerLink="/protegido">Ruta protegida</a>
@@ -24,12 +40,6 @@
         <button type="button" (click)="logout()">Cerrar sesión</button>
       </div>
 
-      <p>
-        <strong>Access Token completo:</strong><br />
-        <code class="access-token">{{ accessTokenPreview }}</code>
-      </p>
-
-      <button type="button" (click)="obtenerAccessToken()">Obtener token</button>
       <button type="button" (click)="consultarPedidos()" [disabled]="cargandoPedidos()">
         {{ cargandoPedidos() ? 'Consultando...' : 'Consultar pedidos' }}
       </button>

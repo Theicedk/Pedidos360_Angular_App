@@ -20,5 +20,5 @@ export const routes: Routes = [
 		loadComponent: () =>
 			import('./orders/orders').then((module) => module.Orders),
 	},
-	{ path: '', pathMatch: 'full', redirectTo: 'protegido' },
+	{ path: '', pathMatch: 'full', children: [] },
 ];
