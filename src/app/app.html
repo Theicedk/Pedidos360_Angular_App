@@ -18,7 +18,9 @@
       <p><strong>Tenant ID:</strong> {{ user.tenantId }}</p>
 
       <div>
-        <a href="/">Ir a Ruta Protegida</a>
+        <a routerLink="/protegido">Ruta protegida</a>
+        <a routerLink="/catalog">Catálogo</a>
+        <a routerLink="/orders">Pedidos</a>
         <button type="button" (click)="logout()">Cerrar sesión</button>
       </div>
 
