@@ -1,5 +1,5 @@
 import { Injectable, inject } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpParams } from '@angular/common/http';
 import { map, Observable } from 'rxjs';
 import { environment } from '../../environments/environtment';
 
@@ -25,6 +25,13 @@ export class OrdersService {
 
 	listarPedidos(): Observable<Order[]> {
 		return this.http.get<unknown>(this.apiUrl).pipe(
+			map((response) => this.extraerPedidos(response)),
+		);
+	}
+
+	listarPedidosPorCliente(clientId: string): Observable<Order[]> {
+		const params = new HttpParams().set('clientId', clientId);
+		return this.http.get<unknown>(this.apiUrl, { params }).pipe(
 			map((response) => this.extraerPedidos(response)),
 		);
 	}

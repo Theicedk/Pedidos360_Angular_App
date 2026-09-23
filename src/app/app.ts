@@ -64,6 +64,8 @@ export class App implements OnInit {
   productoParaComprar = signal(false);
   cargandoCatalogoCliente = signal(false);
   errorCatalogoCliente = signal('');
+  guardandoPedido = signal(false);
+  errorGuardarPedido = signal('');
   creandoProducto = signal(false);
   errorCrearProducto = signal('');
   nuevoProducto: Product = this.crearProductoVacio();
@@ -243,6 +245,43 @@ export class App implements OnInit {
     return this.carritoCliente().reduce((total, item) => total + item.precio * item.cantidad, 0);
   }
 
+  guardarPedido(): void {
+    const carrito = this.carritoCliente();
+    const account = this.authService.instance.getActiveAccount();
+    const clientId = this.obtenerIdCliente();
+
+    if (carrito.length === 0 || !clientId || this.guardandoPedido()) {
+      return;
+    }
+
+    this.errorGuardarPedido.set('');
+    this.guardandoPedido.set(true);
+    this.ordersService.crearPedido({
+      clientId,
+      clientName: account?.name ?? account?.username,
+      status: 'Pendiente',
+      totalAmount: this.totalCarrito(),
+      items: carrito.map((item) => ({
+        productId: item.id,
+        quantity: item.cantidad,
+        unitPrice: item.precio,
+      })),
+    }).subscribe({
+      next: () => {
+        this.carritoCliente.set([]);
+        this.guardandoPedido.set(false);
+        this.cerrarModalCrearPedido();
+        this.pedidosCliente.set([]);
+        this.cargarHistorialCliente();
+      },
+      error: (error: unknown) => {
+        console.error('Error al guardar el pedido:', error);
+        this.errorGuardarPedido.set('No se pudo guardar el pedido.');
+        this.guardandoPedido.set(false);
+      },
+    });
+  }
+
   private cargarPedidosOperador(): void {
     if (!this.esOperador() || this.cargandoPedidosOperador() || this.pedidosOperador().length > 0) {
       return;
@@ -276,12 +315,9 @@ export class App implements OnInit {
 
     this.errorHistorialCliente.set('');
     this.cargandoHistorialCliente.set(true);
-    this.ordersService.listarPedidos().subscribe({
+    this.ordersService.listarPedidosPorCliente(clientId).subscribe({
       next: (pedidos) => {
-        const pedidosDelCliente = pedidos
-          .filter((pedido) => pedido.clientId === clientId)
-          .map((pedido) => this.mapearPedido(pedido));
-        this.pedidosCliente.set(pedidosDelCliente);
+        this.pedidosCliente.set(pedidos.map((pedido) => this.mapearPedido(pedido)));
         this.cargandoHistorialCliente.set(false);
       },
       error: (error: unknown) => {

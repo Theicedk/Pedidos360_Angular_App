@@ -372,6 +372,18 @@
             </tbody>
           </table>
           <p><strong>Total:</strong> {{ totalCarrito() | currency }}</p>
+
+          @if (errorGuardarPedido()) {
+            <p role="alert">{{ errorGuardarPedido() }}</p>
+          }
+
+          <button
+            type="button"
+            (click)="guardarPedido()"
+            [disabled]="carritoCliente().length === 0 || guardandoPedido()"
+          >
+            {{ guardandoPedido() ? 'Guardando pedido...' : 'Guardar pedido' }}
+          </button>
         }
 
         <button type="button" (click)="cerrarModalCrearPedido()">Cerrar</button>
