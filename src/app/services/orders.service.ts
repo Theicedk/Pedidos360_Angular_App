@@ -1,6 +1,6 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { Observable } from 'rxjs';
+import { map, Observable } from 'rxjs';
 import { environment } from '../../environments/environtment';
 
 export interface OrderItem {
@@ -24,7 +24,9 @@ export class OrdersService {
 	private readonly apiUrl = `${environment.apiBaseUrl}/api/orders`;
 
 	listarPedidos(): Observable<Order[]> {
-		return this.http.get<Order[]>(this.apiUrl);
+		return this.http.get<unknown>(this.apiUrl).pipe(
+			map((response) => this.extraerPedidos(response)),
+		);
 	}
 
 	crearPedido(order: Order): Observable<Order> {
@@ -33,5 +35,23 @@ export class OrdersService {
 
 	cambiarEstado(id: number, status: string): Observable<Order> {
 		return this.http.put<Order>(`${this.apiUrl}/${id}/status`, { status });
+	}
+
+	private extraerPedidos(response: unknown): Order[] {
+		if (Array.isArray(response)) {
+			return response as Order[];
+		}
+
+		if (typeof response === 'object' && response !== null) {
+			const body = response as Record<string, unknown>;
+			const collection = body['pedidos'] ?? body['orders'] ?? body['data'] ?? body['content'] ?? body['items'];
+
+			if (Array.isArray(collection)) {
+				return collection as Order[];
+			}
+		}
+
+		console.warn('La API de pedidos no devolvió una colección:', response);
+		return [];
 	}
 }

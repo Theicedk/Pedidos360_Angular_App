@@ -41,9 +41,23 @@ export class Orders implements OnInit {
 			},
 			error: (error: unknown) => {
 				console.error('Error al cargar los pedidos:', error);
-				this.error.set('No se pudieron cargar los pedidos.');
+				const status = this.obtenerEstadoError(error);
+				this.error.set(
+					status === 500
+						? 'El backend devolvió un error 500 al consultar los pedidos.'
+						: 'No se pudieron cargar los pedidos.',
+				);
 				this.cargando.set(false);
 			},
 		});
+	}
+
+	private obtenerEstadoError(error: unknown): number | null {
+		if (typeof error === 'object' && error !== null && 'status' in error) {
+			const status = (error as { status: unknown }).status;
+			return typeof status === 'number' ? status : null;
+		}
+
+		return null;
 	}
 }

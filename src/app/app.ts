@@ -547,7 +547,7 @@ export class App implements OnInit {
     this.errorApi.set('');
     this.cargandoPedidos.set(true);
 
-    this.http.get(`${environment.apiBaseUrl}/api/pedidos`).subscribe({
+    this.http.get(`${environment.apiBaseUrl}/api/orders`).subscribe({
       next: (respuesta) => {
         this.respuestaApi.set(respuesta);
         this.cargandoPedidos.set(false);

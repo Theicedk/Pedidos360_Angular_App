@@ -20,6 +20,7 @@ import {
   MSALInstanceFactory,
   MSALInterceptorConfigFactory,
 } from './msal-config';
+import { NgrokInterceptor } from './ngrok.interceptor';
 
 export const appConfig: ApplicationConfig = {
   providers: [
@@ -41,6 +42,11 @@ export const appConfig: ApplicationConfig = {
     {
       provide: HTTP_INTERCEPTORS,
       useClass: MsalInterceptor,
+      multi: true,
+    },
+    {
+      provide: HTTP_INTERCEPTORS,
+      useClass: NgrokInterceptor,
       multi: true,
     },
     MsalService,
