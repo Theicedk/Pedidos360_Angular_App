@@ -22,9 +22,39 @@
         <section>
           <h4>Panel del cliente</h4>
           <p>Crea y sigue tus propios pedidos.</p>
+          <h5>Historial de pedidos</h5>
+          @if (cargandoHistorialCliente()) {
+            <p>Cargando historial...</p>
+          } @else if (errorHistorialCliente()) {
+            <p role="alert">{{ errorHistorialCliente() }}</p>
+          } @else {
+            <table>
+              <thead>
+                <tr>
+                  <th>Pedido</th>
+                  <th>Cliente</th>
+                  <th>Total</th>
+                  <th>Estado</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (pedido of pedidosCliente(); track pedido.id) {
+                  <tr>
+                    <td>#{{ pedido.id }}</td>
+                    <td>{{ pedido.cliente }}</td>
+                    <td>{{ pedido.total | currency }}</td>
+                    <td>{{ pedido.estado }}</td>
+                  </tr>
+                } @empty {
+                  <tr>
+                    <td colspan="4">No tienes pedidos registrados.</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          }
           <p>Selecciona una opción para continuar:</p>
-          <button id="crear-pedido" type="button">Crear pedido</button>
-          <button type="button">Consultar historial</button>
+          <button id="crear-pedido" type="button" (click)="abrirModalCrearPedido()">Crear pedido</button>
         </section>
       } @else if (esOperador()) {
         <section>
@@ -38,37 +68,47 @@
 
           <div class="orders-dashboard">
             <h5>Bandeja de pedidos</h5>
-            <table>
-              <thead>
-                <tr>
-                  <th>Pedido</th>
-                  <th>Cliente</th>
-                  <th>Total</th>
-                  <th>Estado de despacho</th>
-                </tr>
-              </thead>
-              <tbody>
-                @for (pedido of pedidosOperador(); track pedido.id) {
+            @if (cargandoPedidosOperador()) {
+              <p>Cargando pedidos...</p>
+            } @else if (errorPedidosOperador()) {
+              <p role="alert">{{ errorPedidosOperador() }}</p>
+            } @else {
+              <table>
+                <thead>
                   <tr>
-                    <td>#{{ pedido.id }}</td>
-                    <td>{{ pedido.cliente }}</td>
-                    <td>{{ pedido.total | currency }}</td>
-                    <td>
-                      <select
-                        [value]="pedido.estado"
-                        (change)="actualizarEstadoDespacho(pedido.id, $event)"
-                        [attr.aria-label]="'Estado de despacho del pedido ' + pedido.id"
-                      >
-                        @for (estado of estadosDespacho; track estado) {
-                          <option [value]="estado">{{ estado }}</option>
-                        }
-                      </select>
-                      <button type="button">Actualizar</button>
-                    </td>
+                    <th>Pedido</th>
+                    <th>Cliente</th>
+                    <th>Total</th>
+                    <th>Estado de despacho</th>
                   </tr>
-                }
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  @for (pedido of pedidosOperador(); track pedido.id) {
+                    <tr>
+                      <td>#{{ pedido.id }}</td>
+                      <td>{{ pedido.cliente }}</td>
+                      <td>{{ pedido.total | currency }}</td>
+                      <td>
+                        <select
+                          [value]="pedido.estado"
+                          (change)="actualizarEstadoDespacho(pedido.id, $event)"
+                          [attr.aria-label]="'Estado de despacho del pedido ' + pedido.id"
+                        >
+                          @for (estado of estadosDespacho; track estado) {
+                            <option [value]="estado">{{ estado }}</option>
+                          }
+                        </select>
+                        <button type="button">Actualizar</button>
+                      </td>
+                    </tr>
+                  } @empty {
+                    <tr>
+                      <td colspan="4">No hay pedidos disponibles.</td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            }
           </div>
         </section>
       } @else if (esAdministrador()) {
@@ -248,6 +288,93 @@
           </button>
           <button type="button" (click)="cerrarModalEliminar()">Cancelar</button>
         </div>
+      </section>
+    </div>
+  }
+
+  @if (productoParaComprar()) {
+    <div class="modal-backdrop" role="presentation">
+      <section class="modal modal-carrito" role="dialog" aria-modal="true" aria-labelledby="titulo-crear-pedido">
+        <h2 id="titulo-crear-pedido">Crear pedido</h2>
+        <p>Selecciona productos y cantidades disponibles para agregarlos al carrito.</p>
+
+        @if (cargandoCatalogoCliente()) {
+          <p>Cargando productos...</p>
+        } @else if (errorCatalogoCliente()) {
+          <p role="alert">{{ errorCatalogoCliente() }}</p>
+        } @else {
+          <h3>Productos disponibles</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>Producto</th>
+                <th>Precio</th>
+                <th>Stock</th>
+                <th>Acción</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (producto of catalogoCliente(); track producto.id) {
+                <tr>
+                  <td>{{ producto.nombre }}</td>
+                  <td>{{ producto.precio | currency }}</td>
+                  <td>{{ producto.stock }}</td>
+                  <td>
+                    <button
+                      type="button"
+                      [disabled]="producto.stock === 0 || cantidadEnCarrito(producto.id) >= producto.stock"
+                      (click)="agregarAlCarrito(producto)"
+                    >
+                      Agregar
+                    </button>
+                  </td>
+                </tr>
+              } @empty {
+                <tr>
+                  <td colspan="4">No hay productos disponibles.</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+
+          <h3>Carrito</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>Producto</th>
+                <th>Cantidad</th>
+                <th>Subtotal</th>
+                <th>Acción</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (item of carritoCliente(); track item.id) {
+                <tr>
+                  <td>{{ item.nombre }}</td>
+                  <td>
+                    <input
+                      type="number"
+                      min="1"
+                      [max]="item.stock"
+                      [value]="item.cantidad"
+                      (change)="cambiarCantidadCarrito(item.id, $event)"
+                      [attr.aria-label]="'Cantidad de ' + item.nombre"
+                    />
+                  </td>
+                  <td>{{ item.precio * item.cantidad | currency }}</td>
+                  <td><button type="button" (click)="quitarDelCarrito(item.id)">Quitar</button></td>
+                </tr>
+              } @empty {
+                <tr>
+                  <td colspan="4">El carrito está vacío.</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+          <p><strong>Total:</strong> {{ totalCarrito() | currency }}</p>
+        }
+
+        <button type="button" (click)="cerrarModalCrearPedido()">Cerrar</button>
       </section>
     </div>
   }

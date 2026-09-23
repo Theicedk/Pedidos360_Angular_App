@@ -5,6 +5,7 @@ import { MsalBroadcastService, MsalService } from '@azure/msal-angular';
 import { of } from 'rxjs';
 import { App } from './app';
 import { CatalogService } from './services/catalog.service';
+import { OrdersService } from './services/orders.service';
 
 const msalServiceMock = {
   initialize: () => of(undefined),
@@ -24,6 +25,10 @@ const catalogServiceMock = {
   listarProductos: () => of([]),
 };
 
+const ordersServiceMock = {
+  listarPedidos: () => of([]),
+};
+
 describe('App', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
@@ -34,6 +39,7 @@ describe('App', () => {
         { provide: MsalService, useValue: msalServiceMock },
         { provide: MsalBroadcastService, useValue: msalBroadcastServiceMock },
         { provide: CatalogService, useValue: catalogServiceMock },
+        { provide: OrdersService, useValue: ordersServiceMock },
       ],
     })
       .compileComponents();

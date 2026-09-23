@@ -8,10 +8,14 @@ import { AccountInfo, AuthenticationResult, InteractionStatus } from '@azure/msa
 import { catchError, filter, finalize, of, switchMap, timeout } from 'rxjs';
 import { environment } from '../environments/environtment';
 import { CatalogService, Product } from './services/catalog.service';
+import { Order, OrdersService } from './services/orders.service';
 
 type TokenClaims = {
   roles?: unknown;
   role?: unknown;
+  oid?: unknown;
+  sub?: unknown;
+  clientId?: unknown;
 };
 
 type EstadoDespacho = 'Pendiente' | 'En preparación' | 'Despachado' | 'Entregado';
@@ -31,6 +35,10 @@ type ProductoAdministrador = {
   stock: number;
 };
 
+type ProductoCarrito = ProductoAdministrador & {
+  cantidad: number;
+};
+
 @Component({
   selector: 'app-root',
   imports: [CommonModule, FormsModule, RouterLink, RouterOutlet],
@@ -46,6 +54,16 @@ export class App implements OnInit {
   cargandoPedidos = signal(false);
   cargandoCatalogo = signal(false);
   errorCatalogo = signal('');
+  cargandoPedidosOperador = signal(false);
+  errorPedidosOperador = signal('');
+  cargandoHistorialCliente = signal(false);
+  errorHistorialCliente = signal('');
+  pedidosCliente = signal<PedidoOperador[]>([]);
+  catalogoCliente = signal<ProductoAdministrador[]>([]);
+  carritoCliente = signal<ProductoCarrito[]>([]);
+  productoParaComprar = signal(false);
+  cargandoCatalogoCliente = signal(false);
+  errorCatalogoCliente = signal('');
   creandoProducto = signal(false);
   errorCrearProducto = signal('');
   nuevoProducto: Product = this.crearProductoVacio();
@@ -56,11 +74,7 @@ export class App implements OnInit {
   productoEditado: Product = this.crearProductoVacio();
   guardandoEdicion = signal(false);
   errorEditarProducto = signal('');
-  pedidosOperador = signal<PedidoOperador[]>([
-    { id: 1001, cliente: 'Ana López', total: 125.5, estado: 'Pendiente' },
-    { id: 1002, cliente: 'Carlos Pérez', total: 89.99, estado: 'En preparación' },
-    { id: 1003, cliente: 'María García', total: 240, estado: 'Despachado' },
-  ]);
+  pedidosOperador = signal<PedidoOperador[]>([]);
   estadosDespacho: EstadoDespacho[] = [
     'Pendiente',
     'En preparación',
@@ -74,6 +88,7 @@ export class App implements OnInit {
     private readonly msalBroadcastService: MsalBroadcastService,
     private readonly http: HttpClient,
     private readonly catalogService: CatalogService,
+    private readonly ordersService: OrdersService,
   ) {}
 
   ngOnInit(): void {
@@ -153,6 +168,163 @@ export class App implements OnInit {
   esAdministrador(): boolean {
     const rol = this.rolUsuario().trim().toLowerCase().replace(/^role_/, '');
     return rol === 'administrador' || rol === 'admin' || rol === 'administrator';
+  }
+
+  abrirModalCrearPedido(): void {
+    this.productoParaComprar.set(true);
+    this.cargarCatalogoCliente();
+  }
+
+  cerrarModalCrearPedido(): void {
+    this.productoParaComprar.set(false);
+  }
+
+  private cargarCatalogoCliente(): void {
+    if (this.cargandoCatalogoCliente() || this.catalogoCliente().length > 0) {
+      return;
+    }
+
+    this.errorCatalogoCliente.set('');
+    this.cargandoCatalogoCliente.set(true);
+    this.catalogService.listarProductos().subscribe({
+      next: (productos) => {
+        this.catalogoCliente.set(productos.map((producto) => this.mapearProducto(producto)));
+        this.cargandoCatalogoCliente.set(false);
+      },
+      error: (error: unknown) => {
+        console.error('Error al cargar el catálogo para el cliente:', error);
+        this.errorCatalogoCliente.set('No se pudo cargar el catálogo de productos.');
+        this.cargandoCatalogoCliente.set(false);
+      },
+    });
+  }
+
+  agregarAlCarrito(producto: ProductoAdministrador): void {
+    const productoEnCarrito = this.carritoCliente().find((item) => item.id === producto.id);
+    const cantidadActual = productoEnCarrito?.cantidad ?? 0;
+
+    if (cantidadActual >= producto.stock) {
+      return;
+    }
+
+    this.carritoCliente.update((carrito) => {
+      if (productoEnCarrito) {
+        return carrito.map((item) => item.id === producto.id
+          ? { ...item, cantidad: item.cantidad + 1 }
+          : item);
+      }
+
+      return [...carrito, { ...producto, cantidad: 1 }];
+    });
+  }
+
+  cantidadEnCarrito(productoId: number): number {
+    return this.carritoCliente().find((item) => item.id === productoId)?.cantidad ?? 0;
+  }
+
+  cambiarCantidadCarrito(productoId: number, event: Event): void {
+    const producto = this.catalogoCliente().find((item) => item.id === productoId);
+    const cantidadSolicitada = Number((event.target as HTMLInputElement).value);
+    if (!producto) {
+      return;
+    }
+
+    const cantidad = Math.min(Math.max(Math.trunc(cantidadSolicitada) || 1, 1), producto.stock);
+    this.carritoCliente.update((carrito) =>
+      carrito.map((item) => item.id === productoId ? { ...item, cantidad } : item),
+    );
+  }
+
+  quitarDelCarrito(productoId: number): void {
+    this.carritoCliente.update((carrito) => carrito.filter((item) => item.id !== productoId));
+  }
+
+  totalCarrito(): number {
+    return this.carritoCliente().reduce((total, item) => total + item.precio * item.cantidad, 0);
+  }
+
+  private cargarPedidosOperador(): void {
+    if (!this.esOperador() || this.cargandoPedidosOperador() || this.pedidosOperador().length > 0) {
+      return;
+    }
+
+    this.errorPedidosOperador.set('');
+    this.cargandoPedidosOperador.set(true);
+    this.ordersService.listarPedidos().subscribe({
+      next: (pedidos) => {
+        this.pedidosOperador.set(pedidos.map((pedido) => this.mapearPedido(pedido)));
+        this.cargandoPedidosOperador.set(false);
+      },
+      error: (error: unknown) => {
+        console.error('Error al cargar los pedidos del operador:', error);
+        this.errorPedidosOperador.set('No se pudieron cargar los pedidos desde el backend.');
+        this.cargandoPedidosOperador.set(false);
+      },
+    });
+  }
+
+  private cargarHistorialCliente(): void {
+    if (!this.esCliente() || this.cargandoHistorialCliente() || this.pedidosCliente().length > 0) {
+      return;
+    }
+
+    const clientId = this.obtenerIdCliente();
+    if (!clientId) {
+      this.errorHistorialCliente.set('No se encontró el identificador del cliente autenticado.');
+      return;
+    }
+
+    this.errorHistorialCliente.set('');
+    this.cargandoHistorialCliente.set(true);
+    this.ordersService.listarPedidos().subscribe({
+      next: (pedidos) => {
+        const pedidosDelCliente = pedidos
+          .filter((pedido) => pedido.clientId === clientId)
+          .map((pedido) => this.mapearPedido(pedido));
+        this.pedidosCliente.set(pedidosDelCliente);
+        this.cargandoHistorialCliente.set(false);
+      },
+      error: (error: unknown) => {
+        console.error('Error al cargar el historial del cliente:', error);
+        this.errorHistorialCliente.set('No se pudo cargar el historial de pedidos.');
+        this.cargandoHistorialCliente.set(false);
+      },
+    });
+  }
+
+  private obtenerIdCliente(): string | null {
+    const account = this.authService.instance.getActiveAccount();
+    const claims = account?.idTokenClaims as TokenClaims | undefined;
+    const claimId = claims?.clientId ?? claims?.oid ?? claims?.sub;
+
+    if (typeof claimId === 'string' && claimId.trim()) {
+      return claimId.trim();
+    }
+
+    return account?.localAccountId ?? null;
+  }
+
+  private mapearPedido(pedido: Order): PedidoOperador {
+    return {
+      id: pedido.id ?? 0,
+      cliente: pedido.clientName ?? pedido.clientId ?? 'Sin cliente',
+      total: pedido.totalAmount ?? 0,
+      estado: this.normalizarEstado(pedido.status),
+    };
+  }
+
+  private normalizarEstado(status?: string): EstadoDespacho {
+    switch (status?.trim().toLowerCase()) {
+      case 'en preparación':
+      case 'en preparacion':
+        return 'En preparación';
+      case 'despachado':
+        return 'Despachado';
+      case 'entregado':
+        return 'Entregado';
+      default:
+        return 'Pendiente';
+    }
   }
 
   private cargarCatalogoAdministrador(): void {
@@ -312,6 +484,8 @@ export class App implements OnInit {
     if (accountRole) {
       this.rolUsuario.set(accountRole);
       this.cargarCatalogoAdministrador();
+      this.cargarPedidosOperador();
+      this.cargarHistorialCliente();
       return;
     }
 
@@ -320,6 +494,8 @@ export class App implements OnInit {
       if (tokenRole) {
         this.rolUsuario.set(tokenRole);
         this.cargarCatalogoAdministrador();
+        this.cargarPedidosOperador();
+        this.cargarHistorialCliente();
         return;
       }
     }
@@ -332,6 +508,8 @@ export class App implements OnInit {
         const tokenRole = this.extraerRol(this.decodificarToken(result.accessToken));
         this.rolUsuario.set(tokenRole ?? 'No identificado');
         this.cargarCatalogoAdministrador();
+        this.cargarPedidosOperador();
+        this.cargarHistorialCliente();
       },
       error: () => {
         this.rolUsuario.set('No identificado');
