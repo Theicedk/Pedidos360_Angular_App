@@ -1,0 +1,25 @@
+.dashboard-summary {
+	display: flex;
+	gap: 0.5rem;
+	align-items: baseline;
+}
+
+.dashboard-summary strong {
+	font-size: 1.5rem;
+}
+
+.orders-dashboard {
+	overflow-x: auto;
+}
+
+table {
+	border-collapse: collapse;
+	min-width: 42rem;
+}
+
+th,
+td {
+	border: 1px solid #ccc;
+	padding: 0.5rem;
+	text-align: left;
+}

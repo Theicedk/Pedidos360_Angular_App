@@ -18,31 +18,123 @@
       <p><strong>Tenant ID:</strong> {{ user.tenantId }}</p>
       <h3>Bienvenido, tu tipo de usuario es: {{ rolUsuario() }}</h3>
 
-      @switch (rolUsuario().toLowerCase()) {
-        @case ('administrador') {
-          <p>Panel de administración disponible.</p>
-        }
-        @case ('vendedor') {
-          <p>Panel de gestión comercial disponible.</p>
-        }
-        @case ('cliente') {
-          <p>Panel de pedidos disponible.</p>
-        }
-        @default {
-          <p>Panel general disponible.</p>
+      @if (esCliente()) {
+        <section>
+          <h4>Panel del cliente</h4>
+          <p>Crea y sigue tus propios pedidos.</p>
+          <p>Selecciona una opción para continuar:</p>
+          <button id="crear-pedido" type="button">Crear pedido</button>
+          <button type="button">Consultar historial</button>
+        </section>
+      } @else if (esOperador()) {
+        <section>
+          <h4>Dashboard del operador</h4>
+          <p>Gestiona pedidos, cambios de estado y la operación diaria.</p>
+
+          <div class="dashboard-summary">
+            <strong>{{ pedidosOperador().length }}</strong>
+            <span>Pedidos en bandeja</span>
+          </div>
+
+          <div class="orders-dashboard">
+            <h5>Bandeja de pedidos</h5>
+            <table>
+              <thead>
+                <tr>
+                  <th>Pedido</th>
+                  <th>Cliente</th>
+                  <th>Total</th>
+                  <th>Estado de despacho</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (pedido of pedidosOperador(); track pedido.id) {
+                  <tr>
+                    <td>#{{ pedido.id }}</td>
+                    <td>{{ pedido.cliente }}</td>
+                    <td>{{ pedido.total | currency }}</td>
+                    <td>
+                      <select
+                        [value]="pedido.estado"
+                        (change)="actualizarEstadoDespacho(pedido.id, $event)"
+                        [attr.aria-label]="'Estado de despacho del pedido ' + pedido.id"
+                      >
+                        @for (estado of estadosDespacho; track estado) {
+                          <option [value]="estado">{{ estado }}</option>
+                        }
+                      </select>
+                      <button type="button">Actualizar</button>
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        </section>
+      } @else if (esAdministrador()) {
+        <section>
+          <h4>Dashboard de administración</h4>
+          <p>Gestiona el catálogo de productos y consulta su stock.</p>
+          <button id="crear-producto" type="button">Crear producto</button>
+
+          <div class="catalog-dashboard">
+            <h5>Catálogo de productos</h5>
+            <table>
+              <thead>
+                <tr>
+                  <th>Producto</th>
+                  <th>Descripción</th>
+                  <th>Precio</th>
+                  <th>Stock</th>
+                  <th>Acciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (producto of productosAdministrador(); track producto.id) {
+                  <tr>
+                    <td>{{ producto.nombre }}</td>
+                    <td>{{ producto.descripcion }}</td>
+                    <td>{{ producto.precio | currency }}</td>
+                    <td>{{ producto.stock }}</td>
+                    <td>
+                      <button type="button">Editar</button>
+                      <button type="button">Actualizar</button>
+                      <button type="button">Borrar</button>
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        </section>
+      } @else {
+        @switch (rolUsuario().toLowerCase()) {
+          @case ('administrador') {
+            <p>Panel de administración disponible.</p>
+          }
+          @case ('vendedor') {
+            <p>Panel de gestión comercial disponible.</p>
+          }
+          @default {
+            <p>Panel general disponible.</p>
+          }
         }
       }
 
       <div>
-        <a routerLink="/protegido">Ruta protegida</a>
-        <a routerLink="/catalog">Catálogo</a>
-        <a routerLink="/orders">Pedidos</a>
+        @if (!esCliente() && !esOperador() && !esAdministrador()) {
+          <a routerLink="/protegido">Ruta protegida</a>
+          <a routerLink="/catalog">Catálogo</a>
+          <a routerLink="/orders">Pedidos</a>
+        }
         <button type="button" (click)="logout()">Cerrar sesión</button>
       </div>
 
-      <button type="button" (click)="consultarPedidos()" [disabled]="cargandoPedidos()">
-        {{ cargandoPedidos() ? 'Consultando...' : 'Consultar pedidos' }}
-      </button>
+      @if (!esCliente() && !esOperador() && !esAdministrador()) {
+        <button type="button" (click)="consultarPedidos()" [disabled]="cargandoPedidos()">
+          {{ cargandoPedidos() ? 'Consultando...' : 'Consultar pedidos' }}
+        </button>
+      }
     </section>
 
     @if (errorApi()) {

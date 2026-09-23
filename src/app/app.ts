@@ -12,6 +12,23 @@ type TokenClaims = {
   role?: unknown;
 };
 
+type EstadoDespacho = 'Pendiente' | 'En preparación' | 'Despachado' | 'Entregado';
+
+type PedidoOperador = {
+  id: number;
+  cliente: string;
+  total: number;
+  estado: EstadoDespacho;
+};
+
+type ProductoAdministrador = {
+  id: number;
+  nombre: string;
+  descripcion: string;
+  precio: number;
+  stock: number;
+};
+
 @Component({
   selector: 'app-root',
   imports: [CommonModule, RouterLink, RouterOutlet],
@@ -25,6 +42,22 @@ export class App implements OnInit {
   respuestaApi = signal<unknown | null>(null);
   errorApi = signal('');
   cargandoPedidos = signal(false);
+  pedidosOperador = signal<PedidoOperador[]>([
+    { id: 1001, cliente: 'Ana López', total: 125.5, estado: 'Pendiente' },
+    { id: 1002, cliente: 'Carlos Pérez', total: 89.99, estado: 'En preparación' },
+    { id: 1003, cliente: 'María García', total: 240, estado: 'Despachado' },
+  ]);
+  estadosDespacho: EstadoDespacho[] = [
+    'Pendiente',
+    'En preparación',
+    'Despachado',
+    'Entregado',
+  ];
+  productosAdministrador = signal<ProductoAdministrador[]>([
+    { id: 1, nombre: 'Café colombiano', descripcion: 'Café tostado de origen', precio: 12.5, stock: 35 },
+    { id: 2, nombre: 'Té verde', descripcion: 'Té verde en hojas', precio: 8.75, stock: 18 },
+    { id: 3, nombre: 'Chocolate artesanal', descripcion: 'Chocolate negro artesanal', precio: 15, stock: 0 },
+  ]);
 
   constructor(
     private readonly authService: MsalService,
@@ -94,6 +127,28 @@ export class App implements OnInit {
     this.authService.logoutRedirect({
       postLogoutRedirectUri: environment.msal.redirectUri,
     });
+  }
+
+  esCliente(): boolean {
+    const rol = this.rolUsuario().trim().toLowerCase().replace(/^role_/, '');
+    return rol === 'cliente' || rol === 'client' || rol === 'customer';
+  }
+
+  esOperador(): boolean {
+    const rol = this.rolUsuario().trim().toLowerCase().replace(/^role_/, '');
+    return rol === 'operador' || rol === 'operator';
+  }
+
+  esAdministrador(): boolean {
+    const rol = this.rolUsuario().trim().toLowerCase().replace(/^role_/, '');
+    return rol === 'administrador' || rol === 'admin' || rol === 'administrator';
+  }
+
+  actualizarEstadoDespacho(id: number, event: Event): void {
+    const estado = (event.target as HTMLSelectElement).value as EstadoDespacho;
+    this.pedidosOperador.update((pedidos) =>
+      pedidos.map((pedido) => pedido.id === id ? { ...pedido, estado } : pedido),
+    );
   }
 
   private actualizarRol(accessToken?: string): void {
