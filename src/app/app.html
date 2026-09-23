@@ -75,36 +75,115 @@
         <section>
           <h4>Dashboard de administración</h4>
           <p>Gestiona el catálogo de productos y consulta su stock.</p>
-          <button id="crear-producto" type="button">Crear producto</button>
+
+          <div class="catalog-dashboard">
+            <h5>Crear producto</h5>
+            <form (ngSubmit)="crearProducto()">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Nombre</th>
+                    <th>Descripción</th>
+                    <th>Precio</th>
+                    <th>Stock</th>
+                    <th>Acción</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>
+                      <input
+                        name="name"
+                        type="text"
+                        [(ngModel)]="nuevoProducto.name"
+                        required
+                        aria-label="Nombre del producto"
+                      />
+                    </td>
+                    <td>
+                      <input
+                        name="description"
+                        type="text"
+                        [(ngModel)]="nuevoProducto.description"
+                        required
+                        aria-label="Descripción del producto"
+                      />
+                    </td>
+                    <td>
+                      <input
+                        name="price"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        [(ngModel)]="nuevoProducto.price"
+                        required
+                        aria-label="Precio del producto"
+                      />
+                    </td>
+                    <td>
+                      <input
+                        name="stock"
+                        type="number"
+                        min="0"
+                        step="1"
+                        [(ngModel)]="nuevoProducto.stock"
+                        required
+                        aria-label="Stock del producto"
+                      />
+                    </td>
+                    <td>
+                      <button id="crear-producto" type="submit" [disabled]="creandoProducto()">
+                        {{ creandoProducto() ? 'Creando...' : 'Crear producto' }}
+                      </button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </form>
+            @if (errorCrearProducto()) {
+              <p role="alert">{{ errorCrearProducto() }}</p>
+            }
+          </div>
 
           <div class="catalog-dashboard">
             <h5>Catálogo de productos</h5>
-            <table>
-              <thead>
-                <tr>
-                  <th>Producto</th>
-                  <th>Descripción</th>
-                  <th>Precio</th>
-                  <th>Stock</th>
-                  <th>Acciones</th>
-                </tr>
-              </thead>
-              <tbody>
-                @for (producto of productosAdministrador(); track producto.id) {
+            @if (cargandoCatalogo()) {
+              <p>Cargando productos...</p>
+            } @else if (errorCatalogo()) {
+              <p role="alert">{{ errorCatalogo() }}</p>
+            } @else {
+              <table>
+                <thead>
                   <tr>
-                    <td>{{ producto.nombre }}</td>
-                    <td>{{ producto.descripcion }}</td>
-                    <td>{{ producto.precio | currency }}</td>
-                    <td>{{ producto.stock }}</td>
-                    <td>
-                      <button type="button">Editar</button>
-                      <button type="button">Actualizar</button>
-                      <button type="button">Borrar</button>
-                    </td>
+                    <th>ID</th>
+                    <th>Producto</th>
+                    <th>Descripción</th>
+                    <th>Precio</th>
+                    <th>Stock</th>
+                    <th>Acciones</th>
                   </tr>
-                }
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  @for (producto of productosAdministrador(); track producto.id) {
+                    <tr>
+                      <td>{{ producto.id }}</td>
+                      <td>{{ producto.nombre }}</td>
+                      <td>{{ producto.descripcion }}</td>
+                      <td>{{ producto.precio | currency }}</td>
+                      <td>{{ producto.stock }}</td>
+                      <td>
+                        <button type="button" (click)="abrirModalEditar(producto)">Editar</button>
+                        <button type="button" (click)="abrirModalEliminar(producto)">Borrar</button>
+                      </td>
+                    </tr>
+                  } @empty {
+                    <tr>
+                      <td colspan="6">No hay productos en el catálogo.</td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            }
           </div>
         </section>
       } @else {
@@ -151,4 +230,87 @@
   }
 
   <router-outlet />
+
+  @if (productoParaEliminar(); as producto) {
+    <div class="modal-backdrop" role="presentation">
+      <section class="modal" role="dialog" aria-modal="true" aria-labelledby="titulo-eliminar-producto">
+        <h2 id="titulo-eliminar-producto">Confirmar eliminación</h2>
+        <p><strong>Producto:</strong> {{ producto.nombre }}</p>
+        <p>¿Estás seguro de que deseas borrar este producto de la base de datos?</p>
+
+        @if (errorEliminarProducto()) {
+          <p role="alert">{{ errorEliminarProducto() }}</p>
+        }
+
+        <div>
+          <button type="button" (click)="confirmarEliminacion()" [disabled]="eliminandoProducto()">
+            {{ eliminandoProducto() ? 'Borrando...' : 'Confirmar eliminación' }}
+          </button>
+          <button type="button" (click)="cerrarModalEliminar()">Cancelar</button>
+        </div>
+      </section>
+    </div>
+  }
+
+  @if (productoParaEditar(); as producto) {
+    <div class="modal-backdrop" role="presentation">
+      <section class="modal" role="dialog" aria-modal="true" aria-labelledby="titulo-editar-producto">
+        <h2 id="titulo-editar-producto">Editar producto</h2>
+        <p><strong>ID:</strong> {{ producto.id }}</p>
+
+        <form (ngSubmit)="guardarEdicion()">
+          <label for="editar-nombre">Nombre</label>
+          <input
+            id="editar-nombre"
+            name="editarNombre"
+            type="text"
+            [(ngModel)]="productoEditado.name"
+            required
+          />
+
+          <label for="editar-descripcion">Descripción</label>
+          <input
+            id="editar-descripcion"
+            name="editarDescripcion"
+            type="text"
+            [(ngModel)]="productoEditado.description"
+            required
+          />
+
+          <label for="editar-precio">Precio</label>
+          <input
+            id="editar-precio"
+            name="editarPrecio"
+            type="number"
+            min="0"
+            step="0.01"
+            [(ngModel)]="productoEditado.price"
+            required
+          />
+
+          <label for="editar-stock">Stock</label>
+          <input
+            id="editar-stock"
+            name="editarStock"
+            type="number"
+            min="0"
+            step="1"
+            [(ngModel)]="productoEditado.stock"
+            required
+          />
+
+          @if (errorEditarProducto()) {
+            <p role="alert">{{ errorEditarProducto() }}</p>
+          }
+
+          <div>
+            <button type="submit" [disabled]="guardandoEdicion()">
+              {{ guardandoEdicion() ? 'Guardando...' : 'Guardar cambios' }}
+            </button>
+            <button type="button" (click)="cerrarModalEditar()">Cancelar</button>
+          </div>
+        </form>
+      </section>
+    </div>
+  }
 </main>

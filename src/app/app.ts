@@ -1,11 +1,13 @@
 import { CommonModule } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
+import { FormsModule } from '@angular/forms';
 import { Component, OnInit, signal } from '@angular/core';
 import { RouterLink, RouterOutlet } from '@angular/router';
 import { MsalBroadcastService, MsalService } from '@azure/msal-angular';
 import { AccountInfo, AuthenticationResult, InteractionStatus } from '@azure/msal-browser';
 import { catchError, filter, finalize, of, switchMap, timeout } from 'rxjs';
 import { environment } from '../environments/environtment';
+import { CatalogService, Product } from './services/catalog.service';
 
 type TokenClaims = {
   roles?: unknown;
@@ -31,7 +33,7 @@ type ProductoAdministrador = {
 
 @Component({
   selector: 'app-root',
-  imports: [CommonModule, RouterLink, RouterOutlet],
+  imports: [CommonModule, FormsModule, RouterLink, RouterOutlet],
   templateUrl: './app.html',
   styleUrl: './app.css',
 })
@@ -42,6 +44,18 @@ export class App implements OnInit {
   respuestaApi = signal<unknown | null>(null);
   errorApi = signal('');
   cargandoPedidos = signal(false);
+  cargandoCatalogo = signal(false);
+  errorCatalogo = signal('');
+  creandoProducto = signal(false);
+  errorCrearProducto = signal('');
+  nuevoProducto: Product = this.crearProductoVacio();
+  productoParaEliminar = signal<ProductoAdministrador | null>(null);
+  errorEliminarProducto = signal('');
+  eliminandoProducto = signal(false);
+  productoParaEditar = signal<ProductoAdministrador | null>(null);
+  productoEditado: Product = this.crearProductoVacio();
+  guardandoEdicion = signal(false);
+  errorEditarProducto = signal('');
   pedidosOperador = signal<PedidoOperador[]>([
     { id: 1001, cliente: 'Ana López', total: 125.5, estado: 'Pendiente' },
     { id: 1002, cliente: 'Carlos Pérez', total: 89.99, estado: 'En preparación' },
@@ -53,16 +67,13 @@ export class App implements OnInit {
     'Despachado',
     'Entregado',
   ];
-  productosAdministrador = signal<ProductoAdministrador[]>([
-    { id: 1, nombre: 'Café colombiano', descripcion: 'Café tostado de origen', precio: 12.5, stock: 35 },
-    { id: 2, nombre: 'Té verde', descripcion: 'Té verde en hojas', precio: 8.75, stock: 18 },
-    { id: 3, nombre: 'Chocolate artesanal', descripcion: 'Chocolate negro artesanal', precio: 15, stock: 0 },
-  ]);
+  productosAdministrador = signal<ProductoAdministrador[]>([]);
 
   constructor(
     private readonly authService: MsalService,
     private readonly msalBroadcastService: MsalBroadcastService,
     private readonly http: HttpClient,
+    private readonly catalogService: CatalogService,
   ) {}
 
   ngOnInit(): void {
@@ -144,6 +155,144 @@ export class App implements OnInit {
     return rol === 'administrador' || rol === 'admin' || rol === 'administrator';
   }
 
+  private cargarCatalogoAdministrador(): void {
+    if (!this.esAdministrador() || this.cargandoCatalogo() || this.productosAdministrador().length > 0) {
+      return;
+    }
+
+    this.errorCatalogo.set('');
+    this.cargandoCatalogo.set(true);
+    this.catalogService.listarProductos().subscribe({
+      next: (productos) => {
+        this.productosAdministrador.set(productos.map((producto) => this.mapearProducto(producto)));
+        this.cargandoCatalogo.set(false);
+      },
+      error: (error: unknown) => {
+        console.error('Error al cargar el catálogo:', error);
+        this.errorCatalogo.set('No se pudo cargar el catálogo desde el backend.');
+        this.cargandoCatalogo.set(false);
+      },
+    });
+  }
+
+  private mapearProducto(producto: Product): ProductoAdministrador {
+    return {
+      id: producto.id ?? 0,
+      nombre: producto.name,
+      descripcion: producto.description,
+      precio: producto.price,
+      stock: producto.stock,
+    };
+  }
+
+  crearProducto(): void {
+    this.errorCrearProducto.set('');
+    this.creandoProducto.set(true);
+
+    this.catalogService.crearProducto(this.nuevoProducto).subscribe({
+      next: (producto) => {
+        this.productosAdministrador.update((productos) => [
+          ...productos,
+          this.mapearProducto(producto),
+        ]);
+        this.nuevoProducto = this.crearProductoVacio();
+        this.creandoProducto.set(false);
+      },
+      error: (error: unknown) => {
+        console.error('Error al crear el producto:', error);
+        this.errorCrearProducto.set('No se pudo crear el producto.');
+        this.creandoProducto.set(false);
+      },
+    });
+  }
+
+  private crearProductoVacio(): Product {
+    return {
+      name: '',
+      description: '',
+      price: 0,
+      stock: 0,
+    };
+  }
+
+  abrirModalEditar(producto: ProductoAdministrador): void {
+    this.productoParaEditar.set(producto);
+    this.productoEditado = {
+      id: producto.id,
+      name: producto.nombre,
+      description: producto.descripcion,
+      price: producto.precio,
+      stock: producto.stock,
+    };
+    this.errorEditarProducto.set('');
+  }
+
+  cerrarModalEditar(): void {
+    this.productoParaEditar.set(null);
+    this.errorEditarProducto.set('');
+  }
+
+  guardarEdicion(): void {
+    const producto = this.productoParaEditar();
+    if (!producto || producto.id === 0) {
+      return;
+    }
+
+    this.errorEditarProducto.set('');
+    this.guardandoEdicion.set(true);
+    this.catalogService.actualizarProducto(producto.id, this.productoEditado).subscribe({
+      next: (productoActualizado) => {
+        this.productosAdministrador.update((productos) =>
+          productos.map((item) => item.id === producto.id
+            ? this.mapearProducto(productoActualizado)
+            : item),
+        );
+        this.guardandoEdicion.set(false);
+        this.cerrarModalEditar();
+      },
+      error: (error: unknown) => {
+        console.error('Error al editar el producto:', error);
+        this.errorEditarProducto.set('No se pudo editar el producto.');
+        this.guardandoEdicion.set(false);
+      },
+    });
+  }
+
+  abrirModalEliminar(producto: ProductoAdministrador): void {
+    this.productoParaEliminar.set(producto);
+    this.errorEliminarProducto.set('');
+  }
+
+  cerrarModalEliminar(): void {
+    this.productoParaEliminar.set(null);
+    this.errorEliminarProducto.set('');
+  }
+
+  confirmarEliminacion(): void {
+    const producto = this.productoParaEliminar();
+
+    if (!producto) {
+      return;
+    }
+
+    this.errorEliminarProducto.set('');
+    this.eliminandoProducto.set(true);
+    this.catalogService.borrarProducto(producto.id).subscribe({
+      next: () => {
+        this.productosAdministrador.update((productos) =>
+          productos.filter((item) => item.id !== producto.id),
+        );
+        this.eliminandoProducto.set(false);
+        this.cerrarModalEliminar();
+      },
+      error: (error: unknown) => {
+        console.error('Error al borrar el producto:', error);
+        this.errorEliminarProducto.set('No se pudo borrar el producto.');
+        this.eliminandoProducto.set(false);
+      },
+    });
+  }
+
   actualizarEstadoDespacho(id: number, event: Event): void {
     const estado = (event.target as HTMLSelectElement).value as EstadoDespacho;
     this.pedidosOperador.update((pedidos) =>
@@ -162,6 +311,7 @@ export class App implements OnInit {
     const accountRole = this.extraerRol(accountClaims);
     if (accountRole) {
       this.rolUsuario.set(accountRole);
+      this.cargarCatalogoAdministrador();
       return;
     }
 
@@ -169,6 +319,7 @@ export class App implements OnInit {
       const tokenRole = this.extraerRol(this.decodificarToken(accessToken));
       if (tokenRole) {
         this.rolUsuario.set(tokenRole);
+        this.cargarCatalogoAdministrador();
         return;
       }
     }
@@ -180,6 +331,7 @@ export class App implements OnInit {
       next: (result) => {
         const tokenRole = this.extraerRol(this.decodificarToken(result.accessToken));
         this.rolUsuario.set(tokenRole ?? 'No identificado');
+        this.cargarCatalogoAdministrador();
       },
       error: () => {
         this.rolUsuario.set('No identificado');
