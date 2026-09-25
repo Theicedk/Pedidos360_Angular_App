@@ -55,6 +55,6 @@ describe('App', () => {
     const fixture = TestBed.createComponent(App);
     await fixture.whenStable();
     const compiled = fixture.nativeElement as HTMLElement;
-    expect(compiled.querySelector('h1')?.textContent).toContain('Pedidos360 - MSAL + Angular');
+    expect(compiled.querySelector('h1')?.textContent).toContain('Pedidos360');
   });
 });

@@ -18,7 +18,22 @@ type TokenClaims = {
   clientId?: unknown;
 };
 
-type EstadoDespacho = 'Pendiente' | 'En preparación' | 'Despachado' | 'Entregado';
+type EstadoDespacho =
+  | 'CREADO'
+  | 'ACEPTADO'
+  | 'EN_PREPARACION'
+  | 'DESPACHADO'
+  | 'ENTREGADO'
+  | 'CANCELADO';
+
+const ETIQUETAS_ESTADO: Record<EstadoDespacho, string> = {
+  CREADO: 'Creado',
+  ACEPTADO: 'Aceptado',
+  EN_PREPARACION: 'En preparación',
+  DESPACHADO: 'Despachado',
+  ENTREGADO: 'Entregado',
+  CANCELADO: 'Cancelado',
+};
 
 type PedidoOperador = {
   id: number;
@@ -56,6 +71,8 @@ export class App implements OnInit {
   errorCatalogo = signal('');
   cargandoPedidosOperador = signal(false);
   errorPedidosOperador = signal('');
+  actualizandoEstado = signal(false);
+  errorEstadoDespacho = signal('');
   cargandoHistorialCliente = signal(false);
   errorHistorialCliente = signal('');
   pedidosCliente = signal<PedidoOperador[]>([]);
@@ -78,10 +95,12 @@ export class App implements OnInit {
   errorEditarProducto = signal('');
   pedidosOperador = signal<PedidoOperador[]>([]);
   estadosDespacho: EstadoDespacho[] = [
-    'Pendiente',
-    'En preparación',
-    'Despachado',
-    'Entregado',
+    'CREADO',
+    'ACEPTADO',
+    'EN_PREPARACION',
+    'DESPACHADO',
+    'ENTREGADO',
+    'CANCELADO',
   ];
   productosAdministrador = signal<ProductoAdministrador[]>([]);
 
@@ -350,17 +369,12 @@ export class App implements OnInit {
   }
 
   private normalizarEstado(status?: string): EstadoDespacho {
-    switch (status?.trim().toLowerCase()) {
-      case 'en preparación':
-      case 'en preparacion':
-        return 'En preparación';
-      case 'despachado':
-        return 'Despachado';
-      case 'entregado':
-        return 'Entregado';
-      default:
-        return 'Pendiente';
-    }
+    const valor = (status ?? '').trim().toUpperCase() as EstadoDespacho;
+    return ETIQUETAS_ESTADO[valor] ? valor : 'CREADO';
+  }
+
+  etiquetaEstado(estado: EstadoDespacho): string {
+    return ETIQUETAS_ESTADO[estado] ?? estado;
   }
 
   private cargarCatalogoAdministrador(): void {
@@ -503,9 +517,28 @@ export class App implements OnInit {
 
   actualizarEstadoDespacho(id: number, event: Event): void {
     const estado = (event.target as HTMLSelectElement).value as EstadoDespacho;
-    this.pedidosOperador.update((pedidos) =>
-      pedidos.map((pedido) => pedido.id === id ? { ...pedido, estado } : pedido),
-    );
+
+    if (this.actualizandoEstado()) {
+      return;
+    }
+
+    this.errorEstadoDespacho.set('');
+    this.actualizandoEstado.set(true);
+    this.ordersService.cambiarEstado(id, estado).subscribe({
+      next: (pedido) => {
+        this.pedidosOperador.update((pedidos) =>
+          pedidos.map((item) => item.id === id
+            ? { ...item, estado: this.normalizarEstado(pedido.status) }
+            : item),
+        );
+        this.actualizandoEstado.set(false);
+      },
+      error: (error: unknown) => {
+        console.error('Error al actualizar el estado del pedido:', error);
+        this.errorEstadoDespacho.set('No se pudo actualizar el estado del pedido.');
+        this.actualizandoEstado.set(false);
+      },
+    });
   }
 
   private actualizarRol(accessToken?: string): void {

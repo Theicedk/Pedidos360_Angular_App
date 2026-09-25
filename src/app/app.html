@@ -1,25 +1,44 @@
-<main>
-  <h1>Pedidos360 - MSAL + Angular</h1>
+<main class="app-shell">
+  <header class="app-header">
+    <div class="brand">
+      <span class="brand-mark">P3</span>
+      <div>
+        <h1>Pedidos360</h1>
+        <p class="brand-subtitle">MSAL + Angular — Autenticación con Microsoft Entra ID</p>
+      </div>
+    </div>
+  </header>
 
   @if (!sesionCargada()) {
-    <section>
+    <section class="status-panel">
+      <span class="spinner" aria-hidden="true"></span>
       <p>Comprobando la sesión...</p>
     </section>
   } @else if (!user) {
-    <section>
+    <section class="auth-panel">
       <h2>Inicia sesión para continuar</h2>
+      <p>Accede con tu cuenta corporativa para usar los paneles de Pedidos360.</p>
       <button type="button" (click)="login()">Iniciar sesión</button>
     </section>
   } @else {
-    <section>
-      <h2>Sesión iniciada correctamente</h2>
-      <p><strong>Nombre:</strong> {{ user.name }}</p>
-      <p><strong>Cuenta:</strong> {{ user.username }}</p>
-      <p><strong>Tenant ID:</strong> {{ user.tenantId }}</p>
-      <h3>Bienvenido, tu tipo de usuario es: {{ rolUsuario() }}</h3>
+    <section class="dashboard">
+      <h2 class="dashboard-title">Sesión iniciada correctamente</h2>
+      <div class="session-card">
+        <p><strong>Nombre</strong><span>{{ user.name }}</span></p>
+        <p><strong>Cuenta</strong><span>{{ user.username }}</span></p>
+        <p><strong>Tenant ID</strong><span>{{ user.tenantId }}</span></p>
+      </div>
+      <h3
+        class="role-badge"
+        [class.role-badge--cliente]="esCliente()"
+        [class.role-badge--operador]="esOperador()"
+        [class.role-badge--admin]="esAdministrador()"
+      >
+        Bienvenido, tu tipo de usuario es: <span class="role-badge__value">{{ rolUsuario() }}</span>
+      </h3>
 
       @if (esCliente()) {
-        <section>
+        <section class="role-panel role-panel--cliente">
           <h4>Panel del cliente</h4>
           <p>Crea y sigue tus propios pedidos.</p>
           <h5>Historial de pedidos</h5>
@@ -43,7 +62,7 @@
                     <td>#{{ pedido.id }}</td>
                     <td>{{ pedido.cliente }}</td>
                     <td>{{ pedido.total | currency }}</td>
-                    <td>{{ pedido.estado }}</td>
+                    <td>{{ etiquetaEstado(pedido.estado) }}</td>
                   </tr>
                 } @empty {
                   <tr>
@@ -57,7 +76,7 @@
           <button id="crear-pedido" type="button" (click)="abrirModalCrearPedido()">Crear pedido</button>
         </section>
       } @else if (esOperador()) {
-        <section>
+        <section class="role-panel role-panel--operador">
           <h4>Dashboard del operador</h4>
           <p>Gestiona pedidos, cambios de estado y la operación diaria.</p>
 
@@ -92,13 +111,13 @@
                         <select
                           [value]="pedido.estado"
                           (change)="actualizarEstadoDespacho(pedido.id, $event)"
+                          [disabled]="actualizandoEstado()"
                           [attr.aria-label]="'Estado de despacho del pedido ' + pedido.id"
                         >
                           @for (estado of estadosDespacho; track estado) {
-                            <option [value]="estado">{{ estado }}</option>
+                            <option [value]="estado">{{ etiquetaEstado(estado) }}</option>
                           }
                         </select>
-                        <button type="button">Actualizar</button>
                       </td>
                     </tr>
                   } @empty {
@@ -108,11 +127,14 @@
                   }
                 </tbody>
               </table>
+              @if (errorEstadoDespacho()) {
+                <p role="alert">{{ errorEstadoDespacho() }}</p>
+              }
             }
           </div>
         </section>
       } @else if (esAdministrador()) {
-        <section>
+        <section class="role-panel role-panel--admin">
           <h4>Dashboard de administración</h4>
           <p>Gestiona el catálogo de productos y consulta su stock.</p>
 
@@ -212,8 +234,8 @@
                       <td>{{ producto.precio | currency }}</td>
                       <td>{{ producto.stock }}</td>
                       <td>
-                        <button type="button" (click)="abrirModalEditar(producto)">Editar</button>
-                        <button type="button" (click)="abrirModalEliminar(producto)">Borrar</button>
+                        <button type="button" class="btn--secondary btn--sm" (click)="abrirModalEditar(producto)">Editar</button>
+                        <button type="button" class="btn--danger btn--sm" (click)="abrirModalEliminar(producto)">Borrar</button>
                       </td>
                     </tr>
                   } @empty {
@@ -240,14 +262,14 @@
         }
       }
 
-      <div>
+      <nav class="dashboard-actions">
         @if (!esCliente() && !esOperador() && !esAdministrador()) {
           <a routerLink="/protegido">Ruta protegida</a>
           <a routerLink="/catalog">Catálogo</a>
           <a routerLink="/orders">Pedidos</a>
         }
-        <button type="button" (click)="logout()">Cerrar sesión</button>
-      </div>
+        <button type="button" class="btn--danger-outline" (click)="logout()">Cerrar sesión</button>
+      </nav>
 
       @if (!esCliente() && !esOperador() && !esAdministrador()) {
         <button type="button" (click)="consultarPedidos()" [disabled]="cargandoPedidos()">
@@ -263,7 +285,8 @@
     }
 
     @if (respuestaApi() !== null) {
-      <section>
+      <section class="response-panel">
+        <h4>Respuesta de la API</h4>
         <pre>{{ respuestaApi() | json }}</pre>
       </section>
     }
@@ -282,11 +305,11 @@
           <p role="alert">{{ errorEliminarProducto() }}</p>
         }
 
-        <div>
-          <button type="button" (click)="confirmarEliminacion()" [disabled]="eliminandoProducto()">
+        <div class="modal-actions">
+          <button type="button" class="btn--danger" (click)="confirmarEliminacion()" [disabled]="eliminandoProducto()">
             {{ eliminandoProducto() ? 'Borrando...' : 'Confirmar eliminación' }}
           </button>
-          <button type="button" (click)="cerrarModalEliminar()">Cancelar</button>
+          <button type="button" class="btn--secondary" (click)="cerrarModalEliminar()">Cancelar</button>
         </div>
       </section>
     </div>
@@ -322,6 +345,7 @@
                   <td>
                     <button
                       type="button"
+                      class="btn--sm"
                       [disabled]="producto.stock === 0 || cantidadEnCarrito(producto.id) >= producto.stock"
                       (click)="agregarAlCarrito(producto)"
                     >
@@ -362,7 +386,7 @@
                     />
                   </td>
                   <td>{{ item.precio * item.cantidad | currency }}</td>
-                  <td><button type="button" (click)="quitarDelCarrito(item.id)">Quitar</button></td>
+                  <td><button type="button" class="btn--danger btn--sm" (click)="quitarDelCarrito(item.id)">Quitar</button></td>
                 </tr>
               } @empty {
                 <tr>
@@ -386,7 +410,7 @@
           </button>
         }
 
-        <button type="button" (click)="cerrarModalCrearPedido()">Cerrar</button>
+        <button type="button" class="btn--secondary" (click)="cerrarModalCrearPedido()">Cerrar</button>
       </section>
     </div>
   }
@@ -442,11 +466,11 @@
             <p role="alert">{{ errorEditarProducto() }}</p>
           }
 
-          <div>
+          <div class="modal-actions">
             <button type="submit" [disabled]="guardandoEdicion()">
               {{ guardandoEdicion() ? 'Guardando...' : 'Guardar cambios' }}
             </button>
-            <button type="button" (click)="cerrarModalEditar()">Cancelar</button>
+            <button type="button" class="btn--secondary" (click)="cerrarModalEditar()">Cancelar</button>
           </div>
         </form>
       </section>
