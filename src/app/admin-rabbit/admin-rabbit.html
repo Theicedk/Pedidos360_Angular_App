@@ -1,0 +1,281 @@
+<section class="rabbit-admin">
+	<header class="rabbit-admin__header">
+		<div>
+			<h4>Gestión de topología RabbitMQ</h4>
+			<p>
+				Gestiona colas, exchanges y bindings a través del microservicio administrador
+				(<code>/api/admin/rabbit</code>) y verifica el resultado de cada operación.
+			</p>
+		</div>
+		<span class="rabbit-admin__role">ROLE_ADMINISTRADOR</span>
+	</header>
+
+	<p class="rabbit-admin__hint">
+		<strong>Endpoints cubiertos:</strong>
+		<code>POST /queues</code>
+		<code>GET /queues/{{ '{name}' }}</code>
+		<code>DELETE /queues/{{ '{name}' }}</code>
+		<code>POST /exchanges</code>
+		<code>DELETE /exchanges/{{ '{name}' }}</code>
+		<code>POST /bindings</code>
+		<code>DELETE /bindings</code>
+		— la lectura de colas devuelve mensajes y consumidores; los exchanges y bindings se
+		verifican por código HTTP y en la consola de RabbitMQ (<code>:15672</code>).
+	</p>
+
+	@if (resultado(); as r) {
+		<p
+			class="rabbit-feedback"
+			[class.rabbit-feedback--error]="r.tipo === 'error'"
+			role="status"
+		>
+			<strong>{{ r.tipo === 'ok' ? 'OK' : 'Error' }}</strong>
+			{{ r.mensaje }}
+		</p>
+	}
+
+	<div class="rabbit-grid">
+		<article class="rabbit-card">
+			<h5>Colas</h5>
+			<p class="rabbit-card__desc">
+				Crea, consulta o elimina una cola y revisa cuántos mensajes y consumidores tiene.
+			</p>
+
+			<form (ngSubmit)="crearCola()">
+				<label for="cola-nombre">Nombre de la cola</label>
+				<input
+					id="cola-nombre"
+					name="colaNombre"
+					type="text"
+					[(ngModel)]="colaNombre"
+					placeholder="q.demo"
+					autocomplete="off"
+				/>
+
+				<label class="rabbit-check">
+					<input type="checkbox" name="colaDurable" [(ngModel)]="colaDurable" />
+					<span>Durable</span>
+				</label>
+
+				<div class="rabbit-actions">
+					<button type="submit" [disabled]="ocupado()">Crear</button>
+					<button
+						type="button"
+						class="btn--secondary"
+						(click)="consultarCola()"
+						[disabled]="ocupado()"
+					>
+						Consultar
+					</button>
+					<button
+						type="button"
+						class="btn--danger"
+						(click)="eliminarCola()"
+						[disabled]="ocupado()"
+					>
+						Eliminar
+					</button>
+				</div>
+			</form>
+
+			@if (colaInfo(); as info) {
+				<dl class="rabbit-metrics">
+					<div>
+						<dt>Cola</dt>
+						<dd>{{ info.name }}</dd>
+					</div>
+					<div>
+						<dt>Mensajes</dt>
+						<dd>{{ info.messages }}</dd>
+					</div>
+					<div>
+						<dt>Consumidores</dt>
+						<dd>{{ info.consumers }}</dd>
+					</div>
+				</dl>
+			}
+
+			<div class="rabbit-chips">
+				<span class="rabbit-chips__label">Verificar cola existente:</span>
+				@for (cola of colasConocidas; track cola) {
+					<button
+						type="button"
+						class="btn--secondary btn--sm"
+						(click)="verificarCola(cola)"
+						[disabled]="ocupado()"
+					>
+						{{ cola }}
+					</button>
+				}
+			</div>
+		</article>
+
+		<article class="rabbit-card">
+			<h5>Exchanges</h5>
+			<p class="rabbit-card__desc">
+				Declara exchanges de tipo direct, topic, fanout o headers y elimínalos por nombre.
+			</p>
+
+			<form (ngSubmit)="crearExchange()">
+				<label for="exchange-nombre">Nombre del exchange</label>
+				<input
+					id="exchange-nombre"
+					name="exchangeNombre"
+					type="text"
+					[(ngModel)]="exchangeNombre"
+					placeholder="ex.demo"
+					autocomplete="off"
+				/>
+
+				<label for="exchange-tipo">Tipo</label>
+				<select id="exchange-tipo" name="exchangeTipo" [(ngModel)]="exchangeTipo">
+					@for (tipo of tiposExchange; track tipo) {
+						<option [value]="tipo">{{ tipo }}</option>
+					}
+				</select>
+
+				<label class="rabbit-check">
+					<input type="checkbox" name="exchangeDurable" [(ngModel)]="exchangeDurable" />
+					<span>Durable</span>
+				</label>
+
+				<div class="rabbit-actions">
+					<button type="submit" [disabled]="ocupado()">Crear</button>
+					<button
+						type="button"
+						class="btn--danger"
+						(click)="eliminarExchange()"
+						[disabled]="ocupado()"
+					>
+						Eliminar
+					</button>
+				</div>
+			</form>
+
+			<div class="rabbit-chips">
+				<span class="rabbit-chips__label">Exchanges del proyecto:</span>
+				@for (exchange of exchangesConocidos; track exchange) {
+					<button
+						type="button"
+						class="btn--secondary btn--sm"
+						(click)="usarExchange(exchange)"
+						[disabled]="ocupado()"
+					>
+						{{ exchange }}
+					</button>
+				}
+			</div>
+		</article>
+
+		<article class="rabbit-card">
+			<h5>Bindings</h5>
+			<p class="rabbit-card__desc">
+				Enlaza una cola a un exchange con una routing key y elimina el binding usando los
+				mismos tres datos.
+			</p>
+
+			<form (ngSubmit)="crearBinding()">
+				<label for="binding-preset">Cargar ejemplo</label>
+				<select
+					id="binding-preset"
+					name="bindingPreset"
+					[ngModel]="bindingPreset"
+					(ngModelChange)="seleccionarPreset($event)"
+				>
+					<option value="">— Selecciona un binding del proyecto —</option>
+					@for (preset of bindingsConocidos; track preset.etiqueta) {
+						<option [value]="preset.etiqueta">{{ preset.etiqueta }}</option>
+					}
+				</select>
+
+				<label for="binding-queue">Cola</label>
+				<input
+					id="binding-queue"
+					name="bindingQueue"
+					type="text"
+					[(ngModel)]="bindingQueue"
+					placeholder="q.cmd.email"
+					autocomplete="off"
+				/>
+
+				<label for="binding-exchange">Exchange</label>
+				<input
+					id="binding-exchange"
+					name="bindingExchange"
+					type="text"
+					[(ngModel)]="bindingExchange"
+					placeholder="cmd.direct"
+					autocomplete="off"
+				/>
+
+				<label for="binding-routing-key">Routing key</label>
+				<input
+					id="binding-routing-key"
+					name="bindingRoutingKey"
+					type="text"
+					[(ngModel)]="bindingRoutingKey"
+					placeholder="email.send"
+					autocomplete="off"
+				/>
+
+				<div class="rabbit-actions">
+					<button type="submit" [disabled]="ocupado()">Crear</button>
+					<button
+						type="button"
+						class="btn--danger"
+						(click)="eliminarBinding()"
+						[disabled]="ocupado()"
+					>
+						Eliminar
+					</button>
+				</div>
+			</form>
+		</article>
+
+		<article class="rabbit-card rabbit-card--wide">
+			<div class="rabbit-card__head">
+				<h5>Registro de verificaciones</h5>
+				<button
+					type="button"
+					class="btn--secondary btn--sm"
+					(click)="limpiarHistorial()"
+					[disabled]="historial().length === 0"
+				>
+					Limpiar
+				</button>
+			</div>
+
+			@if (historial().length === 0) {
+				<p class="rabbit-empty">Todavía no se ejecutaron operaciones.</p>
+			} @else {
+				<table>
+					<thead>
+						<tr>
+							<th>Hora</th>
+							<th>Operación</th>
+							<th>Resultado</th>
+							<th>Detalle</th>
+						</tr>
+					</thead>
+					<tbody>
+						@for (registro of historial(); track $index) {
+							<tr>
+								<td>{{ registro.hora }}</td>
+								<td>{{ registro.operacion }}</td>
+								<td>
+									<span
+										class="rabbit-status"
+										[class.rabbit-status--error]="registro.estado === 'ERROR'"
+									>
+										{{ registro.estado }}
+									</span>
+								</td>
+								<td>{{ registro.detalle }}</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			}
+		</article>
+	</div>
+</section>

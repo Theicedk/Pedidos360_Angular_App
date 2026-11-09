@@ -7,6 +7,8 @@ import { MsalBroadcastService, MsalService } from '@azure/msal-angular';
 import { AccountInfo, AuthenticationResult, InteractionStatus } from '@azure/msal-browser';
 import { catchError, filter, finalize, of, switchMap, timeout } from 'rxjs';
 import { environment } from '../environments/environtment';
+import { AdminRabbit } from './admin-rabbit/admin-rabbit';
+import { RabbitMqDashboardComponent } from './rabbitmq-monitor/rabbitmq-dashboard';
 import { CatalogService, Product } from './services/catalog.service';
 import { Order, OrdersService } from './services/orders.service';
 
@@ -56,7 +58,7 @@ type ProductoCarrito = ProductoAdministrador & {
 
 @Component({
   selector: 'app-root',
-  imports: [CommonModule, FormsModule, RouterLink, RouterOutlet],
+  imports: [CommonModule, FormsModule, RouterLink, RouterOutlet, AdminRabbit, RabbitMqDashboardComponent],
   templateUrl: './app.html',
   styleUrl: './app.css',
 })

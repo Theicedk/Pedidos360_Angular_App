@@ -1,0 +1,313 @@
+<section class="monitor">
+	<header class="monitor__header">
+		<div>
+			<h4>Monitoreo de RabbitMQ</h4>
+			<p>
+				Auditoría del flujo de mensajería: salud del broker, colas clave, throughput y
+				Dead Letter Queues sin salir de Pedidos360.
+			</p>
+		</div>
+
+		<div class="monitor__controls">
+			<span class="monitor__updated" [class.monitor__updated--live]="monitor.polling()">
+				<span class="monitor__dot" aria-hidden="true"></span>
+				@if (monitor.lastUpdated(); as ultima) {
+					Actualizado {{ ultima | date: 'HH:mm:ss' }}
+				} @else {
+					Sin datos
+				}
+			</span>
+
+			<label class="monitor__switch">
+				<input
+					type="checkbox"
+					[checked]="monitor.polling()"
+					(change)="alternarPolling($event)"
+				/>
+				<span>Auto</span>
+			</label>
+
+			<select
+				class="monitor__interval"
+				[ngModel]="monitor.intervalMs()"
+				(ngModelChange)="seleccionarIntervalo($event)"
+				aria-label="Intervalo de actualización"
+			>
+				@for (ms of intervalos; track ms) {
+					<option [ngValue]="ms">{{ ms / 1000 }} s</option>
+				}
+			</select>
+
+			<button type="button" (click)="actualizar()" [disabled]="monitor.refreshing()">
+				{{ monitor.refreshing() ? 'Actualizando...' : 'Actualizar' }}
+			</button>
+		</div>
+	</header>
+
+	@if (monitor.loading() && !monitor.overview()) {
+		<p class="monitor__loading">
+			<span class="spinner" aria-hidden="true"></span>
+			Cargando métricas de RabbitMQ...
+		</p>
+	} @else {
+		@if (monitor.error()) {
+			<p class="monitor__error" role="alert">
+				{{ monitor.error() }}
+				<button type="button" class="btn--secondary btn--sm" (click)="actualizar()">
+					Reintentar
+				</button>
+			</p>
+		}
+
+		@if (monitor.overview(); as overview) {
+			<div class="monitor__kpis">
+				<article class="monitor-kpi monitor-kpi--broker">
+					<span class="monitor-kpi__label">Estado del broker</span>
+					<div class="monitor-kpi__row">
+						<span
+							class="rabbit-pill"
+							[class.rabbit-pill--ok]="estadoBroker() === 'UP'"
+							[class.rabbit-pill--danger]="estadoBroker() === 'DOWN'"
+						>
+							{{ estadoBroker() }}
+						</span>
+						<span class="monitor-kpi__value monitor-kpi__value--sm">{{ overview.version }}</span>
+					</div>
+					<span class="monitor-kpi__hint">{{ overview.node }}</span>
+
+					@if (alarmas().length > 0) {
+						<ul class="monitor-alarms">
+							@for (alarma of alarmas(); track alarma) {
+								<li>{{ alarma }}</li>
+							}
+						</ul>
+					}
+				</article>
+
+				<article class="monitor-kpi">
+					<span class="monitor-kpi__label">Mensajes en espera</span>
+					<span class="monitor-kpi__value">{{ totalReady() }}</span>
+					<span class="monitor-kpi__hint">Ready en colas clave</span>
+				</article>
+
+				<article class="monitor-kpi">
+					<span class="monitor-kpi__label">En proceso</span>
+					<span class="monitor-kpi__value">{{ totalUnacked() }}</span>
+					<span class="monitor-kpi__hint">Unacked · {{ totalConsumers() }} consumidores</span>
+				</article>
+
+				<article class="monitor-kpi" [class.monitor-kpi--alert]="dlqTotal() > 0">
+					<span class="monitor-kpi__label">Alertas en DLQ</span>
+					<span class="monitor-kpi__value">{{ dlqTotal() }}</span>
+					<span class="monitor-kpi__hint">
+						{{ colasSinConsumidor() }} cola(s) sin consumidor con mensajes
+					</span>
+				</article>
+			</div>
+
+			<div class="monitor__rates">
+				<span><small>publish</small><strong>{{ overview.publishRate | number: '1.0-2' }}</strong>/s</span>
+				<span><small>ack</small><strong>{{ overview.ackRate | number: '1.0-2' }}</strong>/s</span>
+				<span><small>deliver</small><strong>{{ overview.deliverRate | number: '1.0-2' }}</strong>/s</span>
+				<span>
+					<small>memoria</small>
+					<strong>{{ formatearBytes(overview.memoryUsed) }}</strong>
+					/ {{ formatearBytes(overview.memoryLimit) }} ({{ porcentajeMemoria() }}%)
+				</span>
+				<span><small>disco libre</small><strong>{{ formatearBytes(overview.diskFree) }}</strong></span>
+			</div>
+		} @else {
+			<p class="monitor__empty">
+				Sin datos del broker. Verifica que RabbitMQ Management esté disponible.
+			</p>
+		}
+
+		<article class="monitor-card">
+			<div class="monitor-card__head">
+				<h5>Colas clave</h5>
+				<span class="monitor-card__meta">
+					{{ monitor.queues().length }} cola(s) monitoreada(s)
+				</span>
+			</div>
+
+			@if (monitor.queues().length === 0) {
+				<p class="monitor__empty">No hay datos de colas para mostrar.</p>
+			} @else {
+				<div class="monitor-table">
+					<table>
+						<thead>
+							<tr>
+								<th>Cola</th>
+								<th>En espera</th>
+								<th>No confirmados</th>
+								<th>Consumidores</th>
+								<th>Incoming/s</th>
+								<th>Deliver/s</th>
+								<th>Estado</th>
+							</tr>
+						</thead>
+						<tbody>
+							@for (cola of monitor.queues(); track cola.name) {
+								<tr>
+									<td class="mono">{{ cola.name }}</td>
+									<td>
+										<span [class]="claseEspera(cola.ready)">{{ cola.ready }}</span>
+									</td>
+									<td>{{ cola.unacked }}</td>
+									<td [class.monitor-cell--alert]="cola.consumers === 0 && cola.ready > 0">
+										{{ cola.consumers }}
+										@if (cola.consumers === 0 && cola.ready > 0) {
+											<span aria-label="Sin consumidores conectados">⚠</span>
+										}
+									</td>
+									<td>{{ cola.incomingRate | number: '1.0-2' }}</td>
+									<td>{{ cola.deliverRate | number: '1.0-2' }}</td>
+									<td>
+										<span [class]="claseCola(cola)">{{ etiquetaCola(cola) }}</span>
+									</td>
+								</tr>
+							} @empty {
+								<tr>
+									<td colspan="7">No hay colas configuradas para monitoreo.</td>
+								</tr>
+							}
+						</tbody>
+					</table>
+				</div>
+			}
+		</article>
+
+		<article class="monitor-card">
+			<div class="monitor-card__head">
+				<h5>Dead Letter Queue</h5>
+
+				<div class="monitor-card__actions">
+					<label for="dlq-filtro">Cola</label>
+					<select
+						id="dlq-filtro"
+						[ngModel]="filtroDlq()"
+						(ngModelChange)="seleccionarFiltro($event)"
+					>
+						<option value="">Todas</option>
+						@for (cola of colasDlq; track cola) {
+							<option [value]="cola">{{ cola }}</option>
+						}
+					</select>
+					<span class="monitor-card__meta">{{ mensajesDlq().length }} mensaje(s)</span>
+				</div>
+			</div>
+
+			@if (accionOk()) {
+				<p class="monitor__ok" role="status">{{ accionOk() }}</p>
+			}
+
+			@if (accionError()) {
+				<p class="monitor__error" role="alert">{{ accionError() }}</p>
+			}
+
+			@if (mensajesDlq().length === 0) {
+				<p class="monitor__empty">
+					No hay mensajes en las DLQ monitoreadas. No se requieren acciones.
+				</p>
+			} @else {
+				<div class="monitor-table">
+					<table>
+						<thead>
+							<tr>
+								<th>Cola</th>
+								<th>Referencia</th>
+								<th>Destino original</th>
+								<th>Motivo</th>
+								<th>Fecha</th>
+								<th>Payload</th>
+								<th>Acciones</th>
+							</tr>
+						</thead>
+						<tbody>
+							@for (mensaje of mensajesDlq(); track $index) {
+								<tr>
+									<td class="mono">{{ mensaje.queue }}</td>
+									<td class="mono">{{ mensaje.reference }}</td>
+									<td class="mono">
+										{{ mensaje.exchange || '—' }}
+										@if (mensaje.routingKey) {
+											<br /><span class="monitor-muted">{{ mensaje.routingKey }}</span>
+										}
+									</td>
+									<td>{{ mensaje.reason || '—' }}</td>
+									<td>{{ formatearFecha(mensaje.failedAt) }}</td>
+									<td class="monitor-preview">{{ mensaje.payload | slice: 0:80 }}</td>
+									<td class="monitor-row-actions">
+										<button
+											type="button"
+											class="btn--secondary btn--sm"
+											(click)="abrirInspeccion(mensaje)"
+										>
+											Inspeccionar
+										</button>
+										<button
+											type="button"
+											class="btn--sm"
+											(click)="reintentar(mensaje)"
+											[disabled]="reencolando()"
+										>
+											Reintentar
+										</button>
+									</td>
+								</tr>
+							}
+						</tbody>
+					</table>
+				</div>
+			}
+		</article>
+	}
+</section>
+
+@if (mensajeSeleccionado(); as mensaje) {
+	<div class="rabbit-modal-backdrop" role="presentation" (click)="cerrarInspeccion()">
+		<section
+			class="rabbit-modal"
+			role="dialog"
+			aria-modal="true"
+			aria-labelledby="titulo-inspeccion"
+			(click)="$event.stopPropagation()"
+		>
+			<header class="rabbit-modal__head">
+				<div>
+					<h4 id="titulo-inspeccion">Mensaje en Dead Letter Queue</h4>
+					<p class="mono">{{ mensaje.queue }}</p>
+				</div>
+				<button type="button" class="btn--secondary btn--sm" (click)="cerrarInspeccion()">
+					Cerrar
+				</button>
+			</header>
+
+			<dl class="monitor-dl">
+				<div><dt>Referencia</dt><dd class="mono">{{ mensaje.reference }}</dd></div>
+				<div><dt>Message ID</dt><dd class="mono">{{ mensaje.messageId || '—' }}</dd></div>
+				<div><dt>Exchange original</dt><dd class="mono">{{ mensaje.exchange || '—' }}</dd></div>
+				<div><dt>Routing key original</dt><dd class="mono">{{ mensaje.routingKey || '—' }}</dd></div>
+				<div><dt>Motivo</dt><dd>{{ mensaje.reason || '—' }}</dd></div>
+				<div><dt>Reintentos (x-death)</dt><dd>{{ mensaje.deathCount }}</dd></div>
+				<div><dt>Fecha de fallo</dt><dd>{{ formatearFecha(mensaje.failedAt) }}</dd></div>
+				<div><dt>Redelivered</dt><dd>{{ mensaje.redelivered ? 'Sí' : 'No' }}</dd></div>
+			</dl>
+
+			<h5>Payload</h5>
+			<pre>{{ formatearPayload(mensaje) }}</pre>
+
+			<h5>Headers / x-death</h5>
+			<pre>{{ formatearJson(mensaje.headers) }}</pre>
+
+			<div class="rabbit-modal__actions">
+				<button type="button" (click)="reintentar(mensaje)" [disabled]="reencolando()">
+					{{ reencolando() ? 'Reintentando...' : 'Reintentar / Requeue' }}
+				</button>
+				<button type="button" class="btn--secondary" (click)="cerrarInspeccion()">
+					Cancelar
+				</button>
+			</div>
+		</section>
+	</div>
+}
