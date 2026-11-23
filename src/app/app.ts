@@ -195,15 +195,18 @@ export class App implements OnInit {
 
   abrirModalCrearPedido(): void {
     this.productoParaComprar.set(true);
-    this.cargarCatalogoCliente();
+    this.cargarCatalogoCliente(true);
   }
 
   cerrarModalCrearPedido(): void {
     this.productoParaComprar.set(false);
   }
 
-  private cargarCatalogoCliente(): void {
-    if (this.cargandoCatalogoCliente() || this.catalogoCliente().length > 0) {
+  private cargarCatalogoCliente(force = false): void {
+    if (this.cargandoCatalogoCliente()) {
+      return;
+    }
+    if (!force && this.catalogoCliente().length > 0) {
       return;
     }
 
@@ -289,18 +292,50 @@ export class App implements OnInit {
       })),
     }).subscribe({
       next: () => {
+        this.actualizarStockLocal(carrito);
         this.carritoCliente.set([]);
         this.guardandoPedido.set(false);
         this.cerrarModalCrearPedido();
         this.pedidosCliente.set([]);
         this.cargarHistorialCliente();
+        this.cargarCatalogoCliente(true);
       },
       error: (error: unknown) => {
         console.error('Error al guardar el pedido:', error);
-        this.errorGuardarPedido.set('No se pudo guardar el pedido.');
+        const status = this.obtenerStatus(error);
+        this.errorGuardarPedido.set(
+          status === 409
+            ? 'No hay stock suficiente para uno o más productos. Revisa las cantidades disponibles.'
+            : 'No se pudo guardar el pedido.',
+        );
+        if (status === 409) {
+          this.cargarCatalogoCliente(true);
+        }
         this.guardandoPedido.set(false);
       },
     });
+  }
+
+  private actualizarStockLocal(carrito: ProductoCarrito[]): void {
+    const cantidades = new Map(carrito.map((item) => [item.id, item.cantidad]));
+
+    this.catalogoCliente.update((productos) =>
+      productos.map((producto) => {
+        const cantidad = cantidades.get(producto.id);
+        return cantidad
+          ? { ...producto, stock: Math.max(0, producto.stock - cantidad) }
+          : producto;
+      }),
+    );
+  }
+
+  private obtenerStatus(error: unknown): number | null {
+    if (typeof error === 'object' && error !== null && 'status' in error) {
+      const status = (error as { status: unknown }).status;
+      return typeof status === 'number' ? status : null;
+    }
+
+    return null;
   }
 
   private cargarPedidosOperador(): void {
